@@ -73,10 +73,15 @@ def parzen_predict_from_distances(dist: np.ndarray, y_train: np.ndarray, k: int)
     width = dist[np.arange(dist.shape[0]), order[:, k]]
     if not np.all(np.isfinite(width)):
         raise ValueError("(k+1)-й сосед не найден: k слишком велик или в матрице остался сам объект")
-    # Нулевая ширина: несколько объектов совпали. Голосуют только они.
-    width_safe = np.where(width > 1e-15, width, np.inf)
-    relative = dist / width_safe[:, None]
-    weights = gaussian_kernel(relative)
+    # h ≈ 0: несколько объектов совпали. У них вес 1, у остальных K(ρ/h) → 0.
+    # Деление на такую ширину дало бы вес 1 всей выборке, то есть большинство.
+    zero_width = width <= 1e-15
+    weights = np.zeros(dist.shape, dtype=np.float64)
+    if np.any(~zero_width):
+        relative = dist[~zero_width] / width[~zero_width, None]
+        weights[~zero_width] = gaussian_kernel(relative)
+    if np.any(zero_width):
+        weights[zero_width] = (dist[zero_width] <= 1e-15).astype(np.float64)
     weights[~np.isfinite(weights)] = 0.0
 
     classes, y_idx = _class_ids(y_train)
